@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2018 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2012-2019 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,60 +31,68 @@
  *
  ****************************************************************************/
 
-#pragma once
+/**
+ * @file px4_simple_app.c
+ * Minimal application example for PX4 autopilot
+ *
+ * @author Example User <mail@example.com>
+ */
 
-#include <px4_platform_common/module.h>
-#include <px4_platform_common/module_params.h>
-#include <uORB/SubscriptionInterval.hpp>
-#include <uORB/topics/parameter_update.h>
+#include <px4_platform_common/px4_config.h>
+#include <px4_platform_common/tasks.h>
+#include <px4_platform_common/posix.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <poll.h>
+#include <string.h>
+#include <math.h>
 
-using namespace time_literals;
+#include <uORB/uORB.h>
+#include <uORB/topics/actuator_outputs.h>
+#include <uORB/topics/vehicle_global_position.h>
 
-extern "C" __EXPORT int template_module_main(int argc, char *argv[]);
+__EXPORT int simple_control_main(int argc, char *argv[]);
 
-
-class TemplateModule : public ModuleBase<TemplateModule>, public ModuleParams
+int simple_control_main(int argc, char *argv[])
 {
-public:
-	TemplateModule(int example_param, bool example_flag);
+	PX4_INFO("\nSimple control\n");
 
-	virtual ~TemplateModule() = default;
+	struct actuator_outputs_s actuators;
 
-	/** @see ModuleBase */
-	static int task_spawn(int argc, char *argv[]);
+	struct vehicle_global_position_s global_pos;
+	memset(&global_pos, 0, sizeof(global_pos));
 
-	/** @see ModuleBase */
-	static TemplateModule *instantiate(int argc, char *argv[]);
+	int global_pos_sub = orb_subscribe(ORB_ID(vehicle_global_position));
 
-	/** @see ModuleBase */
-	static int custom_command(int argc, char *argv[]);
+	struct pollfd fds[1] = {};
+	fds[0].fd = global_pos_sub;
+	fds[0].events = POLLIN;
 
-	/** @see ModuleBase */
-	static int print_usage(const char *reason = nullptr);
+	actuators.output[0] = 2000;
+	actuators.output[1] = 2000;
+	actuators.output[2] = 2000;
+	actuators.output[3] = 2000;
 
-	/** @see ModuleBase::run() */
-	void run() override;
+	orb_advert_t actuators_pub = orb_advertise(ORB_ID(actuator_outputs), &actuators);
 
-	/** @see ModuleBase::print_status() */
-	int print_status() override;
+	while(1) {
 
-private:
+		int ret = poll(fds, 1, 500);
 
-	/**
-	 * Check for parameter changes and update them if needed.
-	 * @param parameter_update_sub uorb subscription to parameter_update
-	 * @param force for a parameter update
-	 */
-	void parameters_update(bool force = false);
+		if (ret < 0) {
+			PX4_INFO("poll error");
+		} else if (ret == 0) {
+			PX4_INFO("no return value");
+		} else {
+			bool pos_updated;
+			orb_check(global_pos_sub, &pos_updated);
+			if(fds[0].revents & POLLIN) {
+				/* publish to actuators topic */
+				orb_publish(ORB_ID(actuator_outputs), actuators_pub, &actuators);
+				PX4_INFO("\nactuators published\n");
+			}
+		}
+	}
 
-
-	DEFINE_PARAMETERS(
-		(ParamInt<px4::params::SYS_AUTOSTART>) _param_sys_autostart,   /**< example parameter */
-		(ParamInt<px4::params::SYS_AUTOCONFIG>) _param_sys_autoconfig  /**< another parameter */
-	)
-
-	// Subscriptions
-	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
-
-};
-
+	return 0;
+}

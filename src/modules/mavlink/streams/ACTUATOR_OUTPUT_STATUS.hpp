@@ -74,6 +74,8 @@ private:
 				msg.actuator[i] = act.output[i];
 			}
 
+			printf("\nHELLOASLDAS\n");
+
 			mavlink_msg_actuator_output_status_send_struct(_mavlink->get_channel(), &msg);
 
 			return true;

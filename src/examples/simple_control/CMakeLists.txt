@@ -32,9 +32,9 @@
 ############################################################################
 
 px4_add_module(
-	MODULE examples__template_module
-	MAIN template_module
+	MODULE examples__simple_control
+	MAIN simple_control
 	SRCS
-		template_module.cpp
+		simple_control.c
 	)
 
